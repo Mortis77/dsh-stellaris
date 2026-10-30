@@ -47,9 +47,10 @@
   "author": "Sengoku Yuno",
   "repository": {
     "type": "git",
-    "url": "https://github.com/<USER>/dsh-stellaris.git"
+    "url": "https://github.com/Mortis77/dsh-stellaris.git"
   },
   "bugs": {
-    "url": "https://github.com/<USER>/dsh-stellaris/issues"
-  }
+    "url": "https://github.com/Mortis77/dsh-stellaris/issues"
+  },
+  "homepage": "https://github.com/Mortis77/dsh-stellaris#readme"
 }
