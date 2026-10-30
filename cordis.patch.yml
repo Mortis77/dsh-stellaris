@@ -1,0 +1,9 @@
+- insert:
+    - id: stellaris
+      # name 必须是裸包名（= node_modules 下的目录名）。写 'stellaris' 解析不到，entry 静默不激活。
+      name: 'dsh-stellaris'
+      inject: [tools]
+      config:
+        python: ''
+        save: ''
+        timeoutMs: 120000

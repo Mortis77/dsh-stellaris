@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行产物
+shots/
+autopilot.log
+autopilot.pid
+autopilot.pause
+_probe_*.png
+coords.json
+coords.calib.json
+
+# 本地存档
+*.sav
+save games/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 本地配置
+.env
+*.local.*

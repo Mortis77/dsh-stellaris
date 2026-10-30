@@ -1,0 +1,55 @@
+{
+  "name": "dsh-stellaris",
+  "version": "0.2.0",
+  "description": "DSH 群星插件：读存档拿局势、窗口截图/OCR 点界面、走注入的原生运行时下命令",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "sx.py",
+    "ui.py",
+    "coords.py",
+    "save_parser.py",
+    "loc.py",
+    "state.py",
+    "advisor.py",
+    "actions.py",
+    "ctrl.py",
+    "winshot.py",
+    "ocr_click.py",
+    "autopilot.py",
+    "cdp_fetch.py",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "stellaris",
+    "game-automation",
+    "ocr",
+    "win32"
+  ],
+  "license": "MIT",
+  "engines": {
+    "python": ">=3.10"
+  },
+  "author": "Sengoku Yuno",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<USER>/dsh-stellaris.git"
+  },
+  "bugs": {
+    "url": "https://github.com/<USER>/dsh-stellaris/issues"
+  }
+}
