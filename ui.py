@@ -105,25 +105,43 @@ def cmd_shot(args) -> int:
     return 0
 
 
-def _raw_click(x: int, y: int, double: bool = False) -> None:
-    """SetCursorPos + mouse_event，两步之间不留缝。
+def _raw_click(x: int, y: int, double: bool = False,
+               settle_ms: int = 250, hold_ms: int = 80) -> None:
+    """SetCursorPos 把光标放过去，等 hover 生效，再按下抬起。
 
-    为什么不用 ctrl.click：它走 MOUSEEVENTF_ABSOLUTE|VIRTUALDESK 把坐标折成
-    0..65535，某些环境下移动被静默吞掉。
+    **为什么必须等 250ms**（2026-10-31 从 dsh-game-stack 学到的，也解释了
+    之前两天「游戏内 UI 点不动」）：
 
-    为什么不能加 sleep：机器上常年跑着 Alas / MAA 这类安卓自动化，它们会不停
-    模拟点击（通过 MuMu）。光标设进去之后哪怕等 0.15 秒，也可能已经被它们
-    挪走，于是 LEFT DOWN 落在错误的位置。真人是「移到→瞬间按下」，
-    中间没有缝，这里必须一样。
+        游戏的按钮大多吃 hover——指针进了按钮区域要等一帧才变亮/变可点。
+        不等这一下就点，会落在「还没激活」的按钮上：回执一切正常，
+        界面毫无反应。
+
+    这和「光标被别人抢走」是两回事，实测数据能分开：
+
+        set(1200,400) → readback(1200,400)  delta=0   位置本来就对
+        set(600,700)  → readback(600,700)   delta=0
+
+    所以之前的推理是反的：位置从来没错，错的是点得太快。主菜单那种普通按钮
+    不需要 hover，所以一次就中；游戏内自绘 UI 需要，所以点十几次都没反应。
+
+    如果哪天光标真被 Alas / MAA 抢了（readback 的 delta 变大），那是另一个
+    问题，该做的是把 settle 调小或者先让那些脚本停下，而不是保留 0。
+
+    为什么不用 ctrl.click：它走 MOUSEEVENTF_ABSOLUTE 把坐标折成 0..65535，
+    某些环境下移动会被静默吞掉。这里直接设物理像素。
     """
     u = ctrl.user32
     u.SetCursorPos(int(x), int(y))
-    # 不留 sleep，直接按下
+    if settle_ms:
+        time.sleep(settle_ms / 1000.0)     # 等 hover 激活
     u.mouse_event(0x0002, 0, 0, 0, 0)      # LEFTDOWN
+    if hold_ms:
+        time.sleep(hold_ms / 1000.0)       # 按住一会儿，有些引擎要
     u.mouse_event(0x0004, 0, 0, 0, 0)      # LEFTUP
     if double:
-        u.SetCursorPos(int(x), int(y))
+        time.sleep(0.10)
         u.mouse_event(0x0002, 0, 0, 0, 0)
+        time.sleep(0.06)
         u.mouse_event(0x0004, 0, 0, 0, 0)
 
 
@@ -150,15 +168,21 @@ def cmd_click(args) -> int:
     # 借前台：点击只能落到前台窗口，借完还回去
     prev_fg = ctrl.user32.GetForegroundWindow()
     need_restore = bool(prev_fg) and prev_fg != w.hwnd
-    ctrl.focus(w)
+    fg_ok = ctrl.focus(w)
     time.sleep(0.25)
-    _raw_click(x, y, bool(args.double))
-    time.sleep(0.5)
+    settle = int(getattr(args, "settle", 250))
+    hold = int(getattr(args, "hold", 80))
+    _raw_click(x, y, bool(args.double), settle_ms=settle, hold_ms=hold)
+    # 点完读一次真实前台，回执里带出来——判断「点没点到」的第一手证据
+    after_fg = int(ctrl.user32.GetForegroundWindow() or 0)
+    time.sleep(0.4)
     if need_restore:
         ctrl.user32.SetForegroundWindow(prev_fg)
     _out({"ok": True, "x": x, "y": y, "named": getattr(args, "named", "") or None,
           "win": f"{w.width}x{w.height}", "double": bool(args.double),
-          "note": "单击没反应的时候试 double=true —— 群星的存档列表、建筑列表都吃双击"})
+          "settle_ms": settle, "hold_ms": hold,
+          "focus_ok": bool(fg_ok), "fg_after": after_fg, "fg_is_game": after_fg == w.hwnd,
+          "note": "点不动先把 settle 调到 400 试试：游戏内 UI 吃 hover，光标进去要等一帧才变可点"})
     return 0
 
 
@@ -385,6 +409,9 @@ def main() -> int:
     p.add_argument("--named", default="",
                    help="用坐标表里的名字点（coords.py list 看全部），换分辨率也能用")
     p.add_argument("--double", action="store_true")
+    p.add_argument("--settle", type=int, default=250,
+                   help="移到位置后等多久再按下（毫秒）。游戏内 UI 吃 hover，默认 250；点不动试 400")
+    p.add_argument("--hold", type=int, default=80, help="按住多久（毫秒）")
     p.add_argument("--abs", action="store_true", help="占位：目前坐标一律按客户区像素算")
     p.set_defaults(func=cmd_click)
 

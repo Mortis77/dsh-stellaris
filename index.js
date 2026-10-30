@@ -250,14 +250,18 @@ export function apply(ctx, config = {}) {
         x: { type: 'number', description: '客户区 x 像素' },
         y: { type: 'number', description: '客户区 y 像素' },
         double: { type: 'boolean', description: '双击' },
+        settle: { type: 'number', description: '移到位置后等多久再按下（毫秒），默认 250。游戏内 UI 吃 hover，点不动试 400' },
+        named: { type: 'string', description: '用坐标表里的名字代替 x/y，比如 top.pause_play。换分辨率也能用' },
       },
-      required: ['x', 'y'],
       additionalProperties: false,
     },
     output: textOutput, timeoutMs,
     execute: (args, exec) => {
-      const argv = ['click', String(args.x), String(args.y)]
+      const argv = ['click']
+      if (args.named) argv.push('--named', args.named)
+      else argv.push(String(args.x), String(args.y))
       if (args.double) argv.push('--double')
+      if (args.settle) argv.push('--settle', String(args.settle))
       return callUi(argv, exec)
     },
   })
