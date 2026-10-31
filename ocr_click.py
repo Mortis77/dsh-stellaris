@@ -87,7 +87,12 @@ def main() -> int:
     ax, ay = cx + x1, cy + y1
     ctrl.focus(w)
     time.sleep(0.3)
-    ctrl.click(w, ax / w.width, ay / w.height)
+    # 交给 sendinput_abs 点：DXVK 下只有 SendInput 的绝对模式能过，
+    # 而且它会自己补 DPI 缩放（本机 200%，ClientToScreen 返回逻辑坐标）
+    import sendinput_abs
+    hwnd = sendinput_abs.find_window(sendinput_abs.TITLE)
+    res = sendinput_abs.click(hwnd, int(ax), int(ay))
+    print('sendinput:', res)
     print(f"clicked ({ax}, {ay})  score={score:.2f}")
     return 0
 

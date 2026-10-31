@@ -15,6 +15,7 @@ index.js 里的 stellaris_* 工具都 spawn 到这里。每个子命令输出**�
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import subprocess
@@ -27,6 +28,19 @@ sys.path.insert(0, str(HERE))
 
 import ctrl
 import winshot
+
+# ── DPI 感知（必须在任何窗口/坐标 API 之前调用）────────────────────────────
+# 这台机器 200% 缩放：窗口物理尺寸 1920×1080，但不做 DPI 感知时
+# GetClientRect 返回的是逻辑尺寸 960×540，而截图是物理像素。
+# 两边差一倍，坐标全错——表现是「点击发出去了但界面没反应」。
+# 声明 PER_MONITOR_AWARE_V2 之后，所有坐标统一到物理像素。
+try:
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)   # PER_MONITOR_AWARE_V2
+except Exception:                                            # noqa: BLE001
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)       # PROCESS_PER_MONITOR_DPI_AWARE
+    except Exception:                                        # noqa: BLE001
+        ctypes.windll.user32.SetProcessDPIAware()
 
 TITLE = "Stellaris"
 # OCR 需要 rapidocr。默认先试当前解释器，再试几个常见位置；
@@ -106,32 +120,31 @@ def cmd_shot(args) -> int:
 
 
 def _raw_click(x: int, y: int, double: bool = False,
-               settle_ms: int = 250, hold_ms: int = 80) -> None:
-    """SetCursorPos 把光标放过去，等 hover 生效，再按下抬起。
+               settle_ms: int = 250, hold_ms: int = 80,
+               origin: tuple[int, int] = (0, 0)) -> None:
+    """点一下。`x, y` 是**客户区**坐标，`origin` 是客户区左上角在屏幕上的位置。
 
-    **为什么必须等 250ms**（2026-10-31 从 dsh-game-stack 学到的，也解释了
-    之前两天「游戏内 UI 点不动」）：
+    ⚠ 2026-10-31 修的一个隐蔽 bug：`SetCursorPos` 要的是**屏幕坐标**，
+    而这里传进来的是客户区坐标。窗口只要不在 (0,0)，点击就会整体偏移
+    ——游戏窗口在 (320,260) 时，客户区 (67,326) 实际点到了屏幕 (67,326)，
+    落在窗口外面。表现是「点击发出去了、前台还是游戏、但界面毫无反应」。
 
-        游戏的按钮大多吃 hover——指针进了按钮区域要等一帧才变亮/变可点。
-        不等这一下就点，会落在「还没激活」的按钮上：回执一切正常，
-        界面毫无反应。
+    所以必须加上 origin。调用方从 `w.left/w.top` 取。
 
-    这和「光标被别人抢走」是两回事，实测数据能分开：
+    另外两条经验（来自 dsh-game-stack 与本机实测）：
 
-        set(1200,400) → readback(1200,400)  delta=0   位置本来就对
-        set(600,700)  → readback(600,700)   delta=0
+    **要点一：等 250ms 让 hover 生效。** 游戏的按钮大多吃 hover——
+    指针进了按钮区域要等一帧才变亮/变可点。不等就点，会落在「还没激活」
+    的按钮上：回执一切正常，界面毫无反应。
 
-    所以之前的推理是反的：位置从来没错，错的是点得太快。主菜单那种普通按钮
-    不需要 hover，所以一次就中；游戏内自绘 UI 需要，所以点十几次都没反应。
-
-    如果哪天光标真被 Alas / MAA 抢了（readback 的 delta 变大），那是另一个
-    问题，该做的是把 settle 调小或者先让那些脚本停下，而不是保留 0。
-
-    为什么不用 ctrl.click：它走 MOUSEEVENTF_ABSOLUTE 把坐标折成 0..65535，
-    某些环境下移动会被静默吞掉。这里直接设物理像素。
+    **要点二：别把 settle 归零。** 曾经怀疑 Alas/MAA 抢光标所以把等待删了，
+    但实测 `set(x,y) → readback(x,y) delta=0`，位置从来没错。
+    真被抢占时 delta 会变大，那时该处理的是那些脚本，不是删等待。
     """
     u = ctrl.user32
-    u.SetCursorPos(int(x), int(y))
+    ox, oy = origin
+    sx, sy = int(x) + ox, int(y) + oy
+    u.SetCursorPos(sx, sy)
     if settle_ms:
         time.sleep(settle_ms / 1000.0)     # 等 hover 激活
     u.mouse_event(0x0002, 0, 0, 0, 0)      # LEFTDOWN
@@ -140,6 +153,7 @@ def _raw_click(x: int, y: int, double: bool = False,
     u.mouse_event(0x0004, 0, 0, 0, 0)      # LEFTUP
     if double:
         time.sleep(0.10)
+        u.SetCursorPos(sx, sy)
         u.mouse_event(0x0002, 0, 0, 0, 0)
         time.sleep(0.06)
         u.mouse_event(0x0004, 0, 0, 0, 0)
@@ -172,7 +186,8 @@ def cmd_click(args) -> int:
     time.sleep(0.25)
     settle = int(getattr(args, "settle", 250))
     hold = int(getattr(args, "hold", 80))
-    _raw_click(x, y, bool(args.double), settle_ms=settle, hold_ms=hold)
+    _raw_click(x, y, bool(args.double), settle_ms=settle, hold_ms=hold,
+               origin=(w.left, w.top))
     # 点完读一次真实前台，回执里带出来——判断「点没点到」的第一手证据
     after_fg = int(ctrl.user32.GetForegroundWindow() or 0)
     time.sleep(0.4)
